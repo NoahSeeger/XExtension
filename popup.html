@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>X Comment Generator</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Oxygen, Ubuntu, Cantarell, sans-serif;
+        width: 380px;
+        min-height: 500px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: #333;
+      }
+
+      .container {
+        background: white;
+        margin: 8px;
+        border-radius: 16px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        overflow: hidden;
+      }
+
+      .header {
+        background: linear-gradient(135deg, #1da1f2 0%, #0c85d0 100%);
+        color: white;
+        padding: 20px;
+        text-align: center;
+      }
+
+      .header h1 {
+        font-size: 18px;
+        font-weight: 600;
+        margin-bottom: 4px;
+      }
+
+      .header p {
+        font-size: 12px;
+        opacity: 0.9;
+      }
+
+      .content {
+        padding: 20px;
+      }
+
+      .section {
+        margin-bottom: 24px;
+      }
+
+      .section-title {
+        font-size: 14px;
+        font-weight: 6 00;
+        color: #333;
+        margin-bottom: 12px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .toggle-container {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 16px;
+        background: #f8f9fa;
+        border-radius: 12px;
+        border: 1px solid #e9ecef;
+      }
+
+      .toggle-label {
+        font-size: 14px;
+        font-weight: 500;
+        color: #495057;
+      }
+
+      .toggle-switch {
+        position: relative;
+        width: 44px;
+        height: 24px;
+        background: #dee2e6;
+        border-radius: 12px;
+        cursor: pointer;
+        transition: background 0.3s ease;
+      }
+
+      .toggle-switch.active {
+        background: #1da1f2;
+      }
+
+      .toggle-switch::after {
+        content: "";
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 20px;
+        height: 20px;
+        background: white;
+        border-radius: 50%;
+        transition: transform 0.3s ease;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+      }
+
+      .toggle-switch.active::after {
+        transform: translateX(20px);
+      }
+
+      .prompt-section {
+        background: #f8f9fa;
+        border-radius: 12px;
+        padding: 16px;
+        border: 1px solid #e9ecef;
+      }
+
+      .prompt-textarea {
+        width: 100%;
+        min-height: 120px;
+        padding: 12px;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        font-size: 13px;
+        line-height: 1.4;
+        font-family: inherit;
+        resize: vertical;
+        background: white;
+        transition: border-color 0.2s ease;
+      }
+
+      .prompt-textarea:focus {
+        outline: none;
+        border-color: #1da1f2;
+        box-shadow: 0 0 0 3px rgba(29, 161, 242, 0.1);
+      }
+
+      .prompt-actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 12px;
+      }
+
+      .btn {
+        padding: 8px 16px;
+        border: none;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        flex: 1;
+      }
+
+      .btn-primary {
+        background: #1da1f2;
+        color: white;
+      }
+
+      .btn-primary:hover {
+        background: #0c85d0;
+        transform: translateY(-1px);
+      }
+
+      .btn-secondary {
+        background: #6c757d;
+        color: white;
+      }
+
+      .btn-secondary:hover {
+        background: #5a6268;
+        transform: translateY(-1px);
+      }
+
+      .btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none;
+      }
+
+      .status {
+        padding: 12px;
+        border-radius: 8px;
+        font-size: 13px;
+        margin-top: 12px;
+        display: none;
+      }
+
+      .status.success {
+        background: #d4edda;
+        color: #155724;
+        border: 1px solid #c3e6cb;
+      }
+
+      .status.error {
+        background: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+      }
+
+      .info-text {
+        font-size: 12px;
+        color: #6c757d;
+        margin-top: 8px;
+        line-height: 1.4;
+      }
+
+      .placeholder {
+        color: #adb5bd;
+        font-style: italic;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>X Comment Generator</h1>
+        <p>Generate engaging comments for tweets</p>
+      </div>
+
+      <div class="content">
+        <div class="section">
+          <div class="section-title">
+            <span>🔧</span>
+            Comment Generation
+          </div>
+          <div class="toggle-container">
+            <span class="toggle-label">Enable comment button on X</span>
+            <div class="toggle-switch" id="enableToggle"></div>
+          </div>
+          <div class="info-text">
+            When enabled, a "Generate Comment" button will appear on tweet pages
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">
+            <span>✏️</span>
+            Custom Prompt
+          </div>
+          <div class="prompt-section">
+            <textarea
+              id="customPrompt"
+              class="prompt-textarea"
+              placeholder="Enter your custom prompt here... The tweet content will be automatically included as '${tweet}' in your prompt."
+            ></textarea>
+            <div class="prompt-actions">
+              <button class="btn btn-primary" id="savePrompt">
+                Save Prompt
+              </button>
+              <button class="btn btn-secondary" id="resetPrompt">
+                Reset to Default
+              </button>
+            </div>
+          </div>
+          <div class="info-text">
+            Customize how the AI generates comments. Use "${tweet}" to reference
+            the original tweet content.
+          </div>
+        </div>
+
+        <div id="status" class="status"></div>
+      </div>
+    </div>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
