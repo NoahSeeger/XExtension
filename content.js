@@ -38,110 +38,77 @@ function getTweetTextFromDOM() {
 }
 
 function findReplyTextbox() {
-  // Try multiple selectors for Draft.js editor
-  const selectors = [
-    "div.DraftEditor-editorContainer div[data-offset-key]",
-    'div[data-testid="tweetTextarea_0"] div[data-offset-key]',
-    'div[data-testid="tweetTextarea_0"] div[contenteditable="true"]',
-    'div.DraftEditor-editorContainer div[contenteditable="true"]',
-    '[contenteditable="true"][role="textbox"]',
-    'div[data-testid="tweetTextarea_0"]',
-    "div.DraftEditor-editorContainer",
-  ];
+  // Find the Draft.js editor container
+  const draftEditor = document.querySelector(
+    "div.DraftEditor-editorContainer div[data-offset-key]"
+  );
+  if (draftEditor) {
+    console.log("Found Draft.js editor");
+    return draftEditor;
+  }
 
-  for (const selector of selectors) {
-    const element = document.querySelector(selector);
-    if (element) {
-      console.log("Found textbox with selector:", selector);
-      return element;
-    }
+  // Fallback to contenteditable
+  const contentEditable = document.querySelector(
+    '[contenteditable="true"][role="textbox"]'
+  );
+  if (contentEditable) {
+    console.log("Found contenteditable element");
+    return contentEditable;
   }
 
   return null;
 }
 
-async function insertTextDirectly(textbox, text) {
-  console.log("Using direct DOM manipulation approach");
+async function insertTextViaReactProps(textbox, text) {
+  console.log("Using React props method to insert text");
 
   try {
-    // Method 1: Try to find the actual editable element within Draft.js
-    let editableElement = textbox;
-
-    // If we found a container, look for the actual editable div
-    if (textbox.classList.contains("DraftEditor-editorContainer")) {
-      const editable = textbox.querySelector("div[data-offset-key]");
-      if (editable) {
-        editableElement = editable;
-        console.log("Found actual editable element within Draft.js");
-      }
-    }
-
-    // Click and focus
-    editableElement.click();
+    // Focus the textbox
+    textbox.click();
     await new Promise((resolve) => setTimeout(resolve, 100));
-    editableElement.focus();
+    textbox.focus();
     await new Promise((resolve) => setTimeout(resolve, 100));
 
     // Clear existing content
-    editableElement.innerHTML = "";
+    textbox.textContent = "";
 
-    // Method 2: Try setting textContent first
-    editableElement.textContent = text;
+    // Set the new text
+    textbox.textContent = text;
 
-    // Method 3: If that doesn't work, try innerHTML with proper formatting
-    if (editableElement.textContent !== text) {
-      editableElement.innerHTML = `<div data-offset-key="${Date.now()}-0-0" class="public-DraftStyleDefault-block public-DraftStyleDefault-ltr"><span data-offset-key="${Date.now()}-0-0"><span data-text="true">${text}</span></span></div>`;
-    }
-
-    // Trigger all possible events
-    const events = [
-      "input",
-      "change",
-      "keyup",
-      "keydown",
-      "paste",
-      "compositionend",
-    ];
-    events.forEach((eventType) => {
-      const event = new Event(eventType, { bubbles: true, cancelable: true });
-      editableElement.dispatchEvent(event);
-    });
-
-    // Method 4: Try to trigger React's internal update
-    const reactKey = Object.keys(editableElement).find((key) =>
+    // Find and trigger React's internal event handlers
+    const reactKey = Object.keys(textbox).find((key) =>
       key.startsWith("__reactProps$")
     );
     if (reactKey) {
-      console.log("Found React props, trying to trigger React update");
-      const reactProps = editableElement[reactKey];
+      console.log("Found React props, triggering internal handlers");
+      const reactProps = textbox[reactKey];
+
+      // Create a proper event object
+      const eventObject = {
+        target: textbox,
+        currentTarget: textbox,
+        type: "input",
+        bubbles: true,
+        cancelable: true,
+      };
+
+      // Trigger React's internal handlers
       if (reactProps.onInput) {
-        reactProps.onInput({
-          target: editableElement,
-          currentTarget: editableElement,
-        });
+        reactProps.onInput(eventObject);
       }
       if (reactProps.onChange) {
-        reactProps.onChange({
-          target: editableElement,
-          currentTarget: editableElement,
-        });
+        reactProps.onChange(eventObject);
       }
-    }
 
-    // Method 5: Try to find and update the parent textarea if it exists
-    const parentTextarea = document.querySelector(
-      'div[data-testid="tweetTextarea_0"] textarea'
-    );
-    if (parentTextarea) {
-      console.log("Found parent textarea, updating it too");
-      parentTextarea.value = text;
-      parentTextarea.dispatchEvent(new Event("input", { bubbles: true }));
-      parentTextarea.dispatchEvent(new Event("change", { bubbles: true }));
+      console.log("React props triggered successfully");
+    } else {
+      console.log("No React props found, using fallback events");
+      // Fallback: trigger standard events
+      textbox.dispatchEvent(new Event("input", { bubbles: true }));
+      textbox.dispatchEvent(new Event("change", { bubbles: true }));
     }
-
-    console.log("Direct DOM manipulation completed");
   } catch (error) {
-    console.error("Error with direct DOM manipulation:", error);
+    console.error("Error inserting text via React props:", error);
   }
 }
 
@@ -149,13 +116,11 @@ function insertTextIntoReply(text) {
   const textbox = findReplyTextbox();
 
   if (textbox) {
-    console.log("Found textbox:", textbox);
-    console.log("Current textbox content:", textbox.textContent);
+    console.log("Found textbox, current content:", textbox.textContent);
 
     // Check if textbox is empty to avoid duplicates
     if (textbox.textContent.trim() === "") {
-      // Use direct DOM manipulation approach
-      insertTextDirectly(textbox, text)
+      insertTextViaReactProps(textbox, text)
         .then(() => {
           console.log("Text inserted successfully:", text);
         })
@@ -238,9 +203,8 @@ function injectRecommendButton() {
       font-size: 12px;
       line-height: 16px;
       min-height: 28px;
-      /* Ensure it fits in the button row */
       white-space: nowrap;
-      margin: 0 4px; /* Add some horizontal margin */
+      margin: 0 4px;
     `;
     recommendButton.onmouseover = () => {
       recommendButton.style.backgroundColor = "#0c85d0";
@@ -250,8 +214,6 @@ function injectRecommendButton() {
     };
 
     presentationDiv.appendChild(recommendButton);
-
-    // Append the new button to the tabListContainer
     tabListContainer.appendChild(presentationDiv);
 
     recommendButton.addEventListener("click", async () => {
@@ -271,10 +233,10 @@ function injectRecommendButton() {
             waitForReplyTextboxAndInsert(response.recommendation);
 
             // Show success feedback
-            recommendButton.textContent = "✓ Inserting...";
+            recommendButton.textContent = "✓ Inserted!";
             setTimeout(() => {
               recommendButton.textContent = "Generate Comment";
-            }, 3000);
+            }, 2000);
           } else {
             alert("Error generating comment: " + response.error);
             recommendButton.textContent = "Generate Comment";

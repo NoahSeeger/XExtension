@@ -1,6 +1,7 @@
 // background.js
 
-const DEFAULT_PROMPT = `You are a clever, authentic Twitter user with a sharp sense for timing and tone. You've just seen this tweet and want to reply with a short, natural-sounding comment.
+const DEFAULT_PROMPT = `
+You are a clever, authentic Twitter user with a sharp sense for timing and tone. You've just seen this tweet and want to reply with a short, natural-sounding comment.
 
 Your reply must:
 - Add value: insight, reflection, or a unique perspective
