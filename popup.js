@@ -27,8 +27,58 @@ document.addEventListener("DOMContentLoaded", () => {
   const resetPromptBtn = document.getElementById("resetPrompt");
   const statusDiv = document.getElementById("status");
 
+  // API Key elements
+  const apiKeyInput = document.getElementById("apiKeyInput");
+  const saveApiKeyBtn = document.getElementById("saveApiKey");
+  const testApiKeyBtn = document.getElementById("testApiKey");
+  const apiKeyStatus = document.getElementById("apiKeyStatus");
+
   // Load saved settings
   loadSettings();
+
+  // API Key functionality
+  saveApiKeyBtn.addEventListener("click", () => {
+    const apiKey = apiKeyInput.value.trim();
+    if (apiKey) {
+      saveSetting("geminiApiKey", apiKey);
+      updateApiKeyStatus("valid", "✅ API Key saved");
+      showStatus("API Key saved successfully!", "success");
+    } else {
+      showStatus("Please enter a valid API key", "error");
+    }
+  });
+
+  testApiKeyBtn.addEventListener("click", async () => {
+    const apiKey = apiKeyInput.value.trim();
+    if (!apiKey) {
+      showStatus("Please enter an API key first", "error");
+      return;
+    }
+
+    testApiKeyBtn.disabled = true;
+    testApiKeyBtn.textContent = "Testing...";
+
+    try {
+      const response = await chrome.runtime.sendMessage({
+        action: "testApiKey",
+        apiKey: apiKey,
+      });
+
+      if (response.success) {
+        updateApiKeyStatus("valid", "✅ API Key valid");
+        showStatus("API Key is working correctly!", "success");
+      } else {
+        updateApiKeyStatus("invalid", "❌ Invalid API Key");
+        showStatus("API Key test failed: " + response.error, "error");
+      }
+    } catch (error) {
+      updateApiKeyStatus("invalid", "❌ Connection failed");
+      showStatus("Failed to test API key", "error");
+    }
+
+    testApiKeyBtn.disabled = false;
+    testApiKeyBtn.textContent = "Test Connection";
+  });
 
   // Toggle functionality
   enableToggle.addEventListener("click", () => {
@@ -77,7 +127,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function loadSettings() {
     chrome.storage.sync.get(
-      ["commentButtonEnabled", "customPrompt"],
+      ["commentButtonEnabled", "customPrompt", "geminiApiKey"],
       (result) => {
         // Load toggle state
         const isEnabled = result.commentButtonEnabled !== false; // Default to true
@@ -88,8 +138,23 @@ document.addEventListener("DOMContentLoaded", () => {
         // Load custom prompt
         const savedPrompt = result.customPrompt || DEFAULT_PROMPT;
         customPrompt.value = savedPrompt;
+
+        // Load API key
+        if (result.geminiApiKey) {
+          apiKeyInput.value = result.geminiApiKey;
+          updateApiKeyStatus("valid", "✅ API Key configured");
+        } else {
+          updateApiKeyStatus("missing", "⚠️ API Key required");
+        }
       }
     );
+  }
+
+  function updateApiKeyStatus(type, message) {
+    apiKeyStatus.className = `api-key-status ${type}`;
+    apiKeyStatus.innerHTML = `<span>${
+      message.split(" ")[0]
+    }</span><span>${message.split(" ").slice(1).join(" ")}</span>`;
   }
 
   function saveSetting(key, value) {
