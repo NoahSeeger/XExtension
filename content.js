@@ -37,13 +37,172 @@ function getTweetTextFromDOM() {
   return null;
 }
 
-function setCaretToEnd(element) {
-  const range = document.createRange();
-  const sel = window.getSelection();
-  range.selectNodeContents(element);
-  range.collapse(false); // false means to the end
-  sel.removeAllRanges();
-  sel.addRange(range);
+function findReplyTextbox() {
+  // Try multiple selectors for Draft.js editor
+  const selectors = [
+    "div.DraftEditor-editorContainer div[data-offset-key]",
+    'div[data-testid="tweetTextarea_0"] div[data-offset-key]',
+    'div[data-testid="tweetTextarea_0"] div[contenteditable="true"]',
+    'div.DraftEditor-editorContainer div[contenteditable="true"]',
+    '[contenteditable="true"][role="textbox"]',
+    'div[data-testid="tweetTextarea_0"]',
+    "div.DraftEditor-editorContainer",
+  ];
+
+  for (const selector of selectors) {
+    const element = document.querySelector(selector);
+    if (element) {
+      console.log("Found textbox with selector:", selector);
+      return element;
+    }
+  }
+
+  return null;
+}
+
+async function insertTextDirectly(textbox, text) {
+  console.log("Using direct DOM manipulation approach");
+
+  try {
+    // Method 1: Try to find the actual editable element within Draft.js
+    let editableElement = textbox;
+
+    // If we found a container, look for the actual editable div
+    if (textbox.classList.contains("DraftEditor-editorContainer")) {
+      const editable = textbox.querySelector("div[data-offset-key]");
+      if (editable) {
+        editableElement = editable;
+        console.log("Found actual editable element within Draft.js");
+      }
+    }
+
+    // Click and focus
+    editableElement.click();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    editableElement.focus();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    // Clear existing content
+    editableElement.innerHTML = "";
+
+    // Method 2: Try setting textContent first
+    editableElement.textContent = text;
+
+    // Method 3: If that doesn't work, try innerHTML with proper formatting
+    if (editableElement.textContent !== text) {
+      editableElement.innerHTML = `<div data-offset-key="${Date.now()}-0-0" class="public-DraftStyleDefault-block public-DraftStyleDefault-ltr"><span data-offset-key="${Date.now()}-0-0"><span data-text="true">${text}</span></span></div>`;
+    }
+
+    // Trigger all possible events
+    const events = [
+      "input",
+      "change",
+      "keyup",
+      "keydown",
+      "paste",
+      "compositionend",
+    ];
+    events.forEach((eventType) => {
+      const event = new Event(eventType, { bubbles: true, cancelable: true });
+      editableElement.dispatchEvent(event);
+    });
+
+    // Method 4: Try to trigger React's internal update
+    const reactKey = Object.keys(editableElement).find((key) =>
+      key.startsWith("__reactProps$")
+    );
+    if (reactKey) {
+      console.log("Found React props, trying to trigger React update");
+      const reactProps = editableElement[reactKey];
+      if (reactProps.onInput) {
+        reactProps.onInput({
+          target: editableElement,
+          currentTarget: editableElement,
+        });
+      }
+      if (reactProps.onChange) {
+        reactProps.onChange({
+          target: editableElement,
+          currentTarget: editableElement,
+        });
+      }
+    }
+
+    // Method 5: Try to find and update the parent textarea if it exists
+    const parentTextarea = document.querySelector(
+      'div[data-testid="tweetTextarea_0"] textarea'
+    );
+    if (parentTextarea) {
+      console.log("Found parent textarea, updating it too");
+      parentTextarea.value = text;
+      parentTextarea.dispatchEvent(new Event("input", { bubbles: true }));
+      parentTextarea.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+
+    console.log("Direct DOM manipulation completed");
+  } catch (error) {
+    console.error("Error with direct DOM manipulation:", error);
+  }
+}
+
+function insertTextIntoReply(text) {
+  const textbox = findReplyTextbox();
+
+  if (textbox) {
+    console.log("Found textbox:", textbox);
+    console.log("Current textbox content:", textbox.textContent);
+
+    // Check if textbox is empty to avoid duplicates
+    if (textbox.textContent.trim() === "") {
+      // Use direct DOM manipulation approach
+      insertTextDirectly(textbox, text)
+        .then(() => {
+          console.log("Text inserted successfully:", text);
+        })
+        .catch((error) => {
+          console.error("Error inserting text:", error);
+        });
+
+      return true;
+    } else {
+      console.log("Reply textbox is not empty, skipping text insertion");
+      return false;
+    }
+  } else {
+    console.log("No textbox found");
+  }
+
+  return false;
+}
+
+function waitForReplyTextboxAndInsert(text) {
+  // First try to find existing textbox
+  if (insertTextIntoReply(text)) {
+    return;
+  }
+
+  // If not found, set up observer to wait for it
+  const observer = new MutationObserver((mutations, obs) => {
+    const textbox = findReplyTextbox();
+    if (textbox) {
+      // Small delay to ensure the textbox is fully initialized
+      setTimeout(() => {
+        if (insertTextIntoReply(text)) {
+          obs.disconnect(); // Stop observing once text is inserted
+        }
+      }, 300);
+    }
+  });
+
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true,
+  });
+
+  // Stop observing after 10 seconds to prevent memory leaks
+  setTimeout(() => {
+    observer.disconnect();
+  }, 10000);
 }
 
 function injectRecommendButton() {
@@ -108,20 +267,28 @@ function injectRecommendButton() {
             tweet: tweetContent,
           });
           if (response.success) {
-            // Copy the recommendation to the clipboard
-            await navigator.clipboard.writeText(response.recommendation);
+            // Insert the recommendation directly into the reply textbox
+            waitForReplyTextboxAndInsert(response.recommendation);
+
+            // Show success feedback
+            recommendButton.textContent = "✓ Inserting...";
+            setTimeout(() => {
+              recommendButton.textContent = "Generate Comment";
+            }, 3000);
           } else {
             alert("Error generating comment: " + response.error);
+            recommendButton.textContent = "Generate Comment";
           }
         } catch (error) {
           console.error("Error during recommendation process:", error);
           alert("An error occurred while generating the comment.");
+          recommendButton.textContent = "Generate Comment";
         }
       } else {
         alert("Could not find tweet text to analyze.");
+        recommendButton.textContent = "Generate Comment";
       }
 
-      recommendButton.textContent = "Generate Comment";
       recommendButton.disabled = false;
     });
   }
