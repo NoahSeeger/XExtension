@@ -1,24 +1,6 @@
 // popup.js
 
-const DEFAULT_PROMPT = `You are a clever, authentic Twitter user with a sharp sense for timing and tone. You've just seen this tweet and want to reply with a short, natural-sounding comment.
-
-Your reply must:
-- Add value: insight, reflection, or a unique perspective
-- Or: be witty, clever, sarcastic (only if the tone fits)
-- Or: express subtle agreement or disagreement, like a real user would
-- Feel spontaneous, human, and casual – no robotic or overly polished phrasing
-- Be tailored to the tweet's style and tone
-- Stay under 280 characters
-
-Avoid:
-- Any mention of being AI
-- Overexplaining or summarizing the tweet
-- Generic or vague statements
-
-→ Only reply with the comment. No intro, no explanations, no markdown.
-
-Here's the tweet:
-"\${tweet}"`;
+import DEFAULT_PROMPT from "./prompt.js";
 
 document.addEventListener("DOMContentLoaded", () => {
   const enableToggle = document.getElementById("enableToggle");
@@ -31,6 +13,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const retweetsCountSpan = document.getElementById("retweetsCount");
   const commentsCountSpan = document.getElementById("commentsCount");
   const automationLogsDiv = document.getElementById("automationLogs");
+
+  // Load saved settings
+  loadSettings();
 
   // API Key elements
   const apiKeyInput = document.getElementById("apiKeyInput");
@@ -49,11 +34,12 @@ document.addEventListener("DOMContentLoaded", () => {
   const commentChance = document.getElementById("commentChance");
   const commentChanceValue = document.getElementById("commentChanceValue");
 
-  // Load saved settings
-  loadSettings();
 
   // Load stats and logs
   loadAutomationStatsAndLogs();
+
+  // Load saved settings
+  loadSettings();
 
   // Listen for updates from content script
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -334,4 +320,22 @@ document.addEventListener("DOMContentLoaded", () => {
       chrome.storage.sync.set({ automationLogs: logs });
     });
   }
+
+  // Download Logs functionality
+  const downloadLogsBtn = document.getElementById("downloadLogsBtn");
+  downloadLogsBtn.addEventListener("click", () => {
+    chrome.storage.sync.get(["automationLogs"], (result) => {
+      const logs = result.automationLogs || [];
+      const logContent = logs.join("\n");
+      const blob = new Blob([logContent], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "automation_logs.txt";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    });
+  });
 });

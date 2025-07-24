@@ -427,7 +427,6 @@
             <textarea
               id="customPrompt"
               class="prompt-textarea"
-              placeholder="Enter your custom prompt here... The tweet content will be automatically included as '${tweet}' in your prompt."
             ></textarea>
             <div class="prompt-actions">
               <button class="btn btn-primary" id="savePrompt">
@@ -446,8 +445,9 @@
 
         <div id="status" class="status"></div>
       </div>
+      </div>
+      <button id="downloadLogsBtn">Download Logs</button>
     </div>
-
-    <script src="popup.js"></script>
+    <script type="module" src="popup.js"></script>
   </body>
 </html>
