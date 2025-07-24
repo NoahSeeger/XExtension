@@ -319,16 +319,103 @@
 
         <div class="section">
           <div class="section-title">
-            <span>🔧</span>
-            Comment Generation
+            <span>Comment Button</span>
           </div>
           <div class="toggle-container">
-            <span class="toggle-label">Enable comment button on X</span>
-            <div class="toggle-switch" id="enableToggle"></div>
+            <span class="toggle-label">Enable Comment Button</span>
+            <div id="enableToggle" class="toggle-switch"></div>
           </div>
-          <div class="info-text">
-            When enabled, a "Generate Comment" button will appear on tweet pages
+        </div>
+        <!-- Automation Mode Toggle -->
+        <div class="section">
+          <div class="section-title">
+            <span>Automation Mode</span>
           </div>
+          <div class="toggle-container">
+            <span class="toggle-label">Auto Like, Comment & Retweet</span>
+            <div id="automationToggle" class="toggle-switch"></div>
+          </div>
+          <div style="margin-top: 12px">
+            <label
+              style="
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                margin-bottom: 6px;
+              "
+            >
+              <input type="checkbox" id="likeEnabled" checked /> Like
+              <input
+                type="range"
+                id="likeChance"
+                min="0"
+                max="100"
+                value="20"
+                style="margin-left: 8px"
+              />
+              <span id="likeChanceValue">20%</span>
+            </label>
+            <label
+              style="
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                margin-bottom: 6px;
+              "
+            >
+              <input type="checkbox" id="retweetEnabled" checked /> Retweet
+              <input
+                type="range"
+                id="retweetChance"
+                min="0"
+                max="100"
+                value="10"
+                style="margin-left: 8px"
+              />
+              <span id="retweetChanceValue">10%</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px">
+              <input type="checkbox" id="commentEnabled" checked /> Comment
+              <input
+                type="range"
+                id="commentChance"
+                min="0"
+                max="100"
+                value="30"
+                style="margin-left: 8px"
+              />
+              <span id="commentChanceValue">30%</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Automation Stats and Logs -->
+        <div class="section">
+          <div class="section-title">
+            <span>Automation Stats</span>
+          </div>
+          <div id="automationStats" class="info-text">
+            Likes: <span id="likesCount">0</span> | Retweets:
+            <span id="retweetsCount">0</span> | Comments:
+            <span id="commentsCount">0</span>
+          </div>
+        </div>
+        <div class="section">
+          <div class="section-title">
+            <span>Automation Logs</span>
+          </div>
+          <div
+            id="automationLogs"
+            style="
+              background: #f8f9fa;
+              border-radius: 8px;
+              padding: 10px;
+              height: 100px;
+              overflow-y: auto;
+              font-size: 12px;
+              border: 1px solid #e9ecef;
+            "
+          ></div>
         </div>
 
         <div class="section">

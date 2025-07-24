@@ -1,6 +1,48 @@
 // content.js
 
 let commentButtonEnabled = true; // Default state
+let automationModeEnabled = false;
+let automationInterval = null;
+let processedTweetIds = new Set();
+let automationStats = { likes: 0, retweets: 0, comments: 0 };
+let automationRunning = false;
+let automationConfig = {
+  likeEnabled: true,
+  likeChance: 20,
+  retweetEnabled: true,
+  retweetChance: 10,
+  commentEnabled: true,
+  commentChance: 30,
+};
+
+// Load stats from storage on start
+chrome.storage.sync.get(["automationStats"], (result) => {
+  if (result.automationStats) {
+    automationStats = result.automationStats;
+  }
+});
+
+// Load config from storage on start
+chrome.storage.sync.get(["automationConfig"], (result) => {
+  if (result.automationConfig) {
+    automationConfig = result.automationConfig;
+  }
+});
+
+function logAutomationAction(action) {
+  const log = `[${new Date().toLocaleTimeString()}] ${action}`;
+  // Send to popup
+  chrome.runtime.sendMessage({ action: "addAutomationLog", log });
+  // Persist log (handled in popup.js)
+}
+
+function updateAutomationStats() {
+  chrome.storage.sync.set({ automationStats });
+  chrome.runtime.sendMessage({
+    action: "updateAutomationStats",
+    stats: automationStats,
+  });
+}
 
 function getTweetTextFromDOM() {
   // Try to find the main tweet article element first
@@ -284,8 +326,8 @@ const observer = new MutationObserver((mutationsList, observer) => {
 observer.observe(document.body, { childList: true, subtree: true });
 
 // Listen for messages from the popup
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === "getTweetText") {
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === "getTweetText") {
     let tweetText = getTweetTextFromDOM();
     if (tweetText) {
       sendResponse({ success: true, tweet: tweetText });
@@ -295,13 +337,230 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         error: "Tweet text not found in content script.",
       });
     }
-  } else if (request.action === "toggleCommentButton") {
-    commentButtonEnabled = request.enabled;
+  } else if (message.action === "toggleCommentButton") {
+    commentButtonEnabled = message.enabled;
     if (commentButtonEnabled) {
       injectRecommendButton();
     } else {
       removeRecommendButton();
     }
     sendResponse({ success: true });
+  } else if (message.action === "toggleAutomationMode") {
+    automationModeEnabled = message.enabled;
+    if (message.config) {
+      automationConfig = message.config;
+    }
+    if (automationModeEnabled) {
+      startAutomationMode();
+    } else {
+      stopAutomationMode();
+    }
+    sendResponse({ success: true });
   }
 });
+
+function startAutomationMode() {
+  if (automationInterval) return;
+  automationInterval = setInterval(
+    runAutomationStep,
+    getRandomInt(7000, 14000)
+  );
+  runAutomationStep();
+}
+
+function stopAutomationMode() {
+  if (automationInterval) {
+    clearInterval(automationInterval);
+    automationInterval = null;
+  }
+}
+
+async function runAutomationStep() {
+  if (automationRunning) return;
+  automationRunning = true;
+  try {
+    window.scrollBy({ top: getRandomInt(300, 600), behavior: "smooth" });
+    await sleep(getRandomInt(800, 1800));
+    const tweetArticles = document.querySelectorAll(
+      'article[data-testid="tweet"]'
+    );
+    for (const article of tweetArticles) {
+      const tweetId = getTweetId(article);
+      if (!tweetId || processedTweetIds.has(tweetId)) continue;
+
+      // Like
+      if (
+        automationConfig.likeEnabled &&
+        Math.random() * 100 < automationConfig.likeChance
+      ) {
+        const likeButton = article.querySelector('[data-testid="like"]');
+        if (likeButton) {
+          likeButton.click();
+          automationStats.likes++;
+          updateAutomationStats();
+          logAutomationAction(`Liked tweet ${tweetId}`);
+          await sleep(getRandomInt(800, 1800));
+        }
+      }
+
+      // Retweet
+      if (
+        automationConfig.retweetEnabled &&
+        Math.random() * 100 < automationConfig.retweetChance
+      ) {
+        const retweetButton = article.querySelector('[data-testid="retweet"]');
+        if (retweetButton) {
+          retweetButton.click();
+          await sleep(getRandomInt(600, 1200));
+          const confirmBtn = document.querySelector(
+            '[data-testid="retweetConfirm"]'
+          );
+          if (confirmBtn) {
+            confirmBtn.click();
+            automationStats.retweets++;
+            updateAutomationStats();
+            logAutomationAction(`Retweeted tweet ${tweetId}`);
+            await sleep(getRandomInt(800, 1800));
+          }
+        }
+      }
+
+      // Comment
+      if (
+        automationConfig.commentEnabled &&
+        Math.random() * 100 < automationConfig.commentChance
+      ) {
+        const replyButton = article.querySelector('[data-testid="reply"]');
+        if (replyButton) {
+          replyButton.click();
+          await sleep(getRandomInt(1200, 2000));
+          const tweetText = getTweetTextFromArticle(article);
+          if (tweetText) {
+            const response = await chrome.runtime.sendMessage({
+              action: "getRecommendation",
+              tweet: tweetText,
+            });
+            if (response.success) {
+              await waitForReplyTextboxAndInsertAsync(response.recommendation);
+              await sleep(getRandomInt(800, 1600));
+              // Find and click the reply (post) button in the modal
+              let replyModalBtn = document.querySelector(
+                '[data-testid="tweetButtonInline"]'
+              );
+              if (!replyModalBtn) {
+                // Fallback: look for button with text 'Reply' or 'Antworten'
+                replyModalBtn = Array.from(
+                  document.querySelectorAll(
+                    'div[role="dialog"] button, div[role="dialog"] div[role="button"]'
+                  )
+                ).find((btn) => {
+                  const txt =
+                    btn.textContent && btn.textContent.trim().toLowerCase();
+                  return txt === "reply" || txt === "antworten";
+                });
+              }
+              if (!replyModalBtn) {
+                // Additional fallback: look for button with data-testid="tweetButton" and text 'Reply' or 'Antworten'
+                replyModalBtn = Array.from(
+                  document.querySelectorAll('button[data-testid="tweetButton"]')
+                ).find((btn) => {
+                  const txt =
+                    btn.textContent && btn.textContent.trim().toLowerCase();
+                  return txt === "reply" || txt === "antworten";
+                });
+              }
+              if (
+                replyModalBtn &&
+                !replyModalBtn.disabled &&
+                !replyModalBtn.getAttribute("aria-disabled")
+              ) {
+                replyModalBtn.click();
+                automationStats.comments++;
+                updateAutomationStats();
+                logAutomationAction(`Commented on tweet ${tweetId}`);
+                await sleep(getRandomInt(1200, 2000));
+              } else {
+                logAutomationAction(
+                  `Failed to find post button for tweet ${tweetId}`
+                );
+              }
+            } else {
+              logAutomationAction(
+                `AI comment failed for tweet ${tweetId}: ${response.error}`
+              );
+            }
+          } else {
+            logAutomationAction(`No tweet text found for tweet ${tweetId}`);
+          }
+        }
+      }
+
+      processedTweetIds.add(tweetId);
+      break;
+    }
+  } catch (err) {
+    logAutomationAction(`Error: ${err.message}`);
+  } finally {
+    automationRunning = false;
+  }
+}
+
+function getTweetId(article) {
+  // Try to extract tweet ID from the article's anchor href
+  const anchor = article.querySelector('a[href*="/status/"]');
+  if (anchor) {
+    const match = anchor.href.match(/status\/(\d+)/);
+    if (match) return match[1];
+  }
+  return null;
+}
+
+function getTweetTextFromArticle(article) {
+  const tweetTextContainer = article.querySelector('[data-testid="tweetText"]');
+  if (tweetTextContainer) {
+    return tweetTextContainer.innerText.trim();
+  }
+  const langDiv = article.querySelector("div[lang]");
+  if (langDiv) {
+    return langDiv.innerText.trim();
+  }
+  return null;
+}
+
+function getRandomInt(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitForReplyTextboxAndInsertAsync(text) {
+  return new Promise((resolve) => {
+    // First try to find existing textbox
+    if (insertTextIntoReply(text)) {
+      resolve();
+      return;
+    }
+    // If not found, set up observer to wait for it
+    const observer = new MutationObserver((mutations, obs) => {
+      const textbox = findReplyTextbox();
+      if (textbox) {
+        setTimeout(() => {
+          if (insertTextIntoReply(text)) {
+            obs.disconnect();
+            resolve();
+          }
+        }, 300);
+      }
+    });
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+    });
+    setTimeout(() => {
+      observer.disconnect();
+      resolve();
+    }, 10000);
+  });
+}

@@ -26,6 +26,11 @@ document.addEventListener("DOMContentLoaded", () => {
   const savePromptBtn = document.getElementById("savePrompt");
   const resetPromptBtn = document.getElementById("resetPrompt");
   const statusDiv = document.getElementById("status");
+  const automationToggle = document.getElementById("automationToggle");
+  const likesCountSpan = document.getElementById("likesCount");
+  const retweetsCountSpan = document.getElementById("retweetsCount");
+  const commentsCountSpan = document.getElementById("commentsCount");
+  const automationLogsDiv = document.getElementById("automationLogs");
 
   // API Key elements
   const apiKeyInput = document.getElementById("apiKeyInput");
@@ -33,8 +38,31 @@ document.addEventListener("DOMContentLoaded", () => {
   const testApiKeyBtn = document.getElementById("testApiKey");
   const apiKeyStatus = document.getElementById("apiKeyStatus");
 
+  // Automation Action Settings
+  const likeEnabled = document.getElementById("likeEnabled");
+  const likeChance = document.getElementById("likeChance");
+  const likeChanceValue = document.getElementById("likeChanceValue");
+  const retweetEnabled = document.getElementById("retweetEnabled");
+  const retweetChance = document.getElementById("retweetChance");
+  const retweetChanceValue = document.getElementById("retweetChanceValue");
+  const commentEnabled = document.getElementById("commentEnabled");
+  const commentChance = document.getElementById("commentChance");
+  const commentChanceValue = document.getElementById("commentChanceValue");
+
   // Load saved settings
   loadSettings();
+
+  // Load stats and logs
+  loadAutomationStatsAndLogs();
+
+  // Listen for updates from content script
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.action === "updateAutomationStats") {
+      updateStats(message.stats);
+    } else if (message.action === "addAutomationLog") {
+      addLog(message.log);
+    }
+  });
 
   // API Key functionality
   saveApiKeyBtn.addEventListener("click", () => {
@@ -107,6 +135,90 @@ document.addEventListener("DOMContentLoaded", () => {
     );
   });
 
+  // Update chance value displays
+  likeChance.addEventListener("input", () => {
+    likeChanceValue.textContent = likeChance.value + "%";
+    saveAutomationConfig();
+  });
+  retweetChance.addEventListener("input", () => {
+    retweetChanceValue.textContent = retweetChance.value + "%";
+    saveAutomationConfig();
+  });
+  commentChance.addEventListener("input", () => {
+    commentChanceValue.textContent = commentChance.value + "%";
+    saveAutomationConfig();
+  });
+  likeEnabled.addEventListener("change", saveAutomationConfig);
+  retweetEnabled.addEventListener("change", saveAutomationConfig);
+  commentEnabled.addEventListener("change", saveAutomationConfig);
+
+  function saveAutomationConfig() {
+    const config = {
+      likeEnabled: likeEnabled.checked,
+      likeChance: parseInt(likeChance.value, 10),
+      retweetEnabled: retweetEnabled.checked,
+      retweetChance: parseInt(retweetChance.value, 10),
+      commentEnabled: commentEnabled.checked,
+      commentChance: parseInt(commentChance.value, 10),
+    };
+    chrome.storage.sync.set({ automationConfig: config });
+  }
+
+  function loadAutomationConfig(cb) {
+    chrome.storage.sync.get(["automationConfig"], (result) => {
+      const config = result.automationConfig || {
+        likeEnabled: true,
+        likeChance: 20,
+        retweetEnabled: true,
+        retweetChance: 10,
+        commentEnabled: true,
+        commentChance: 30,
+      };
+      likeEnabled.checked = config.likeEnabled;
+      likeChance.value = config.likeChance;
+      likeChanceValue.textContent = config.likeChance + "%";
+      retweetEnabled.checked = config.retweetEnabled;
+      retweetChance.value = config.retweetChance;
+      retweetChanceValue.textContent = config.retweetChance + "%";
+      commentEnabled.checked = config.commentEnabled;
+      commentChance.value = config.commentChance;
+      commentChanceValue.textContent = config.commentChance + "%";
+      if (cb) cb(config);
+    });
+  }
+
+  // Load config on startup
+  loadAutomationConfig();
+
+  // Automation Mode toggle functionality
+  automationToggle.addEventListener("click", () => {
+    const isEnabled = automationToggle.classList.contains("active");
+    const newState = !isEnabled;
+    automationToggle.classList.toggle("active");
+    saveSetting("automationModeEnabled", newState);
+
+    // Send message to content script to enable/disable automation and config
+    loadAutomationConfig((config) => {
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (
+          tabs[0] &&
+          (tabs[0].url.includes("twitter.com") || tabs[0].url.includes("x.com"))
+        ) {
+          chrome.tabs.sendMessage(tabs[0].id, {
+            action: "toggleAutomationMode",
+            enabled: newState,
+            config,
+          });
+        }
+      });
+    });
+
+    showStatus(
+      "Automation Mode " + (newState ? "enabled" : "disabled"),
+      "success"
+    );
+  });
+
   // Save custom prompt
   savePromptBtn.addEventListener("click", () => {
     const prompt = customPrompt.value.trim();
@@ -127,12 +239,24 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function loadSettings() {
     chrome.storage.sync.get(
-      ["commentButtonEnabled", "customPrompt", "geminiApiKey"],
+      [
+        "commentButtonEnabled",
+        "customPrompt",
+        "geminiApiKey",
+        "automationModeEnabled",
+      ],
       (result) => {
         // Load toggle state
         const isEnabled = result.commentButtonEnabled !== false; // Default to true
         if (isEnabled) {
           enableToggle.classList.add("active");
+        }
+        // Load automation mode state
+        const automationEnabled = result.automationModeEnabled === true;
+        if (automationEnabled) {
+          automationToggle.classList.add("active");
+        } else {
+          automationToggle.classList.remove("active");
         }
 
         // Load custom prompt
@@ -174,5 +298,40 @@ document.addEventListener("DOMContentLoaded", () => {
     setTimeout(() => {
       statusDiv.style.display = "none";
     }, 3000);
+  }
+
+  function loadAutomationStatsAndLogs() {
+    chrome.storage.sync.get(["automationStats", "automationLogs"], (result) => {
+      if (result.automationStats) {
+        updateStats(result.automationStats);
+      }
+      if (result.automationLogs) {
+        automationLogsDiv.innerHTML = result.automationLogs
+          .map((log) => `<div>${log}</div>`)
+          .join("");
+        automationLogsDiv.scrollTop = automationLogsDiv.scrollHeight;
+      }
+    });
+  }
+
+  function updateStats(stats) {
+    likesCountSpan.textContent = stats.likes || 0;
+    retweetsCountSpan.textContent = stats.retweets || 0;
+    commentsCountSpan.textContent = stats.comments || 0;
+  }
+
+  function addLog(log) {
+    if (!log) return;
+    const div = document.createElement("div");
+    div.textContent = log;
+    automationLogsDiv.appendChild(div);
+    automationLogsDiv.scrollTop = automationLogsDiv.scrollHeight;
+    // Persist logs (keep last 100)
+    chrome.storage.sync.get(["automationLogs"], (result) => {
+      let logs = result.automationLogs || [];
+      logs.push(log);
+      if (logs.length > 100) logs = logs.slice(-100);
+      chrome.storage.sync.set({ automationLogs: logs });
+    });
   }
 });
